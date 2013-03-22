@@ -1,0 +1,12 @@
+EZ extension with some translation tool.
+
+For the moment :
+copy_translation.php script copy objects of one language in another language.
+
+run help_cptrans.php for viewing possibles helps.
+
+Bug to fix :
+For some objects impossible to publish,
+for the moment i skip theses, otherwise i got a fatal error :
+fetching node by node_id return null.
+
