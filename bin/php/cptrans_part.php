@@ -56,15 +56,6 @@ if ( count($options['arguments']) < 2 )
 $cli->showmem(); // <- memory usage check
 
 
-// session variables
-$http = eZHTTPTool::instance();
-if(!$http->hasSessionVariable("count_updated_objects"))
-    $http->setSessionVariable("count_updated_objects", 0);
-if(!$http->hasSessionVariable("count_failed_objects"))
-    $http->setSessionVariable("count_failed_objects", 0);
-if(!$http->hasSessionVariable("count_unprocessed_objects"))
-    $http->setSessionVariable("count_unprocessed_objects", 0);
-
 // Login as admin user
 $ini           = eZINI::instance();
 $userCreatorID = $ini->variable( 'UserSettings', 'UserCreatorID' );
@@ -117,6 +108,14 @@ foreach( $objects_id_list as $object_id )
     $cli->showmem("begin cptrans_part foreach"); // <- memory usage check
 
     $current_object = eZContentObject::fetch( $object_id );
+    if( !is_object($current_object) )
+    {
+        $errormsg = "eZContentObject::fetch return a non object : " . show($current_object);
+        $errormsg.= "; object_id : " . $object_id;
+
+        $cli->outputAndLog("error", $errormsg);
+        break;
+    }
     
     $cli->showmem("object fetched"); // <- memory usage check
 
@@ -128,26 +127,41 @@ foreach( $objects_id_list as $object_id )
         $cli->gnotice( "can translate : " . show( $current_object->canTranslate() ) );
     } 
 
+    owTranslationTools::updateAlwaysAvailable($object_id);
+
     $canPublishObject = (eZContentObjectTreeNode::fetch($current_object->mainParentNodeID()) instanceof eZContentObjectTreeNode) ? true : false;
     //$canPublishObject = true;
+
+    if( !$canPublishObject )
+    {
+        $parent_object_id = owTranslationTools::getObjectIDFromNodeID($current_object->mainParentNodeID());
+        //$parent_object = eZContentObject::fetch($parent_object_id);
+        $parent_fromlang = owTranslationTools::getLocaleByObjectID($parent_object_id, $langs['fromlang']);
+
+        $msg = "Parent of object with ID : $object_id need to be translated also !\n";
+        $msg.= "mainParentNodeID : " . $current_object->mainParentNodeID();
+        $msg.= "\nParent ObjectID : " . $parent_object_id;
+        $msg.= "\nParent fromlang : " . $parent_fromlang;
+        $cli->outputAndLog("warning", $msg);
+
+        $tolang = $langs['tolang'];
+        $commandtoexec = "php " . $cli->scriptpath . "cptrans_part.php $tolang#$parent_fromlang $parent_object_id";
+        $cli->outputAndLog("notice", "execute command : " . $commandtoexec);
+        exec($commandtoexec);
+
+        $canPublishObject = (eZContentObjectTreeNode::fetch($current_object->mainParentNodeID()) instanceof eZContentObjectTreeNode) ? true : false;
+    }
 
     if( !in_array($object_id,$toLang_objectID_list) && $canPublishObject )
     {
         // cleanup internal drafts for object
         $current_object->cleanupInternalDrafts();
 
-        // get datamap
-        $datamap = $current_object->dataMap();
-        $current_attributes = array();
+        $cli->showmem("(before) : copyObjectAttributes"); // <- memory usage check
 
-        $cli->showmem("(IF) : datamap got"); // <- memory usage check
+        $current_attributes = owTranslationTools::copyObjectAttributes($current_object);
 
-        foreach( $datamap as $attr )
-        {
-            $current_attributes[$attr->ContentClassAttributeIdentifier] = $attr->toString();
-        }
-
-        $cli->showmem("(IF) : current_attributes copied"); // <- memory usage check
+        $cli->showmem("(after) : copyObjectAttributes"); // <- memory usage check
 
         $params = array( 'language' => $langs['tolang'],  'attributes' => $current_attributes);
         $update_success = owTranslationTools::publishNewTraductionFromLanguage( $current_object, $params, $langs['fromlang'] );
@@ -158,12 +172,10 @@ foreach( $objects_id_list as $object_id )
         if( $update_success )
         {
             $cli->gnotice($msg);
-            $http->setSessionVariable("count_updated_objects", $http->sessionVariable("count_updated_objects") + 1 );
         }
         else
         {
             $cli->outputAndLog("error", $msg );
-            $http->setSessionVariable("count_failed_objects", $http->sessionVariable("count_failed_objects") + 1 );
         }
 
         $cli->showmem("(IF) : object updated"); // <- memory usage check
@@ -176,8 +188,7 @@ foreach( $objects_id_list as $object_id )
         {
             $errormsg = $langs['tolang'] . " already exists for object ";
             $errormsg.= "ID=" . $current_object->ID;
-            $output_label = "warning";
-            $http->setSessionVariable("count_unprocessed_objects", $http->sessionVariable("count_unprocessed_objects") + 1 );
+            $output_label = "notice";
         }
         else
         {
@@ -186,7 +197,6 @@ foreach( $objects_id_list as $object_id )
             $errormsg.= "node_id : " . $current_object->attribute('main_node_id');
             $errormsg.= "; object_id : " . $current_object->ID;
             $output_label = "error";
-            $http->setSessionVariable("count_failed_objects", $http->sessionVariable("count_failed_objects") + 1 );
         }
 
         $cli->outputAndLog($output_label, $errormsg);

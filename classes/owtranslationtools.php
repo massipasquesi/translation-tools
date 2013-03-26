@@ -255,6 +255,82 @@ class owTranslationTools
         return $lang_objectID_list;
 	}
 
+
+    // retrieve subtree list of objects with translation of lang_ID
+	public static function subtreeObjectsIDListByLocale($language, $nodeID)
+	{
+        $params = array('language' => $language);
+        evd( eZContentObjectTreeNode::fetch($nodeID, "eng-GB") );
+        evd( eZContentObjectTreeNode::fetchByContentObjectID($nodeID) );
+        eZContentObjectTreeNode::subtreeByNodeID( $params, $nodeID );
+
+        if ( !is_numeric( $nodeID ) and !is_array( $nodeID ) )
+        {
+            return null;
+        }
+        
+        if ( $language )
+        {
+            if ( !is_array( $language ) )
+            {
+             $language = array( $language );
+            }
+             // This call must occur after eZContentObjectTreeNode::createPathConditionAndNotEqParentSQLStrings,
+             // because the parent node may not exist in Language
+             eZContentLanguage::setPrioritizedLanguages( $language );
+         }
+        
+         $languageFilter = ' AND ' . eZContentLanguage::languagesSQLFilter( 'ezcontentobject' );
+         
+         if ( $language )
+         {
+             eZContentLanguage::clearPrioritizedLanguages();
+         }
+         
+        evd($languageFilter);
+
+         // Determine whether we should show invisible nodes.
+         $showInvisibleNodesCond = eZContentObjectTreeNode::createShowInvisibleSQLString( true );
+         
+         $query = "SELECT DISTINCT
+                       id,
+                    FROM
+                       ezcontentobject,
+                    WHERE
+                       $languageFilter
+                   ";
+         
+         $query .= " ORDER BY id";
+         
+         $db = eZDB::instance();
+         
+         $server = count( $sqlPermissionChecking['temp_tables'] ) > 0 ? eZDBInterface::SERVER_SLAVE : false;
+         
+         $nodeListArray = $db->arrayQuery( $query, array( 'offset' => $offset,
+                                                          'limit'  => $limit ),
+                                                   $server );
+         
+         if ( $asObject )
+         {
+             $retNodeList = eZContentObjectTreeNode::makeObjectsArray( $nodeListArray );
+             if ( $loadDataMap === true )
+                 eZContentObject::fillNodeListAttributes( $retNodeList );
+             else if ( $loadDataMap && is_numeric( $loadDataMap ) && $loadDataMap >= count( $retNodeList ) )
+                 eZContentObject::fillNodeListAttributes( $retNodeList );
+         }
+         else
+         {
+             $retNodeList = $nodeListArray;
+         }
+         
+         // cleanup temp tables
+         $db->dropTempTableList( $sqlPermissionChecking['temp_tables'] );
+         
+         return $retNodeList;
+
+    }
+
+
     //update initial language
     // @newInitalLang string like 'eng-GB'
     // @object object eZContentObject
@@ -325,6 +401,104 @@ class owTranslationTools
         return $version_status_array;
     }
 
+    public static function updateAlwaysAvailable(  $objectID, $newAlwaysAvailable = true )
+    {
+        if ( eZOperationHandler::operationIsAvailable( 'content_updatealwaysavailable' ) )
+        {
+            $operationResult = eZOperationHandler::execute( 'content', 'updatealwaysavailable',
+                                                            array( 'object_id'            => $objectID,
+                                                                   'new_always_available' => $newAlwaysAvailable,
+                                                                   ) );
+        }
+        else
+        {
+            eZContentOperationCollection::updateAlwaysAvailable( $objectID, $newAlwaysAvailable );
+        }
+
+        eZContentCacheManager::clearContentCache($objectID);
+
+    }
+
+    public static function getObjectIDFromNodeID($node_id)
+    {
+        $query = "SELECT contentobject_id FROM ezcontentobject_tree WHERE node_id=$node_id";
+         
+        $db = eZDB::instance();
+
+        $response = $db->arrayQuery( $query );
+
+        if( count($response) <= 0 )
+            return false;
+
+        return $response[0]['contentobject_id'];        
+    }
+
+    public static function getLocaleByObjectID($object_id, $priorized_locale = false)
+    {
+        $query = "SELECT content_translation from ezcontentobject_name where contentobject_id=$object_id";
+
+        $db = eZDB::instance();
+
+        $response = $db->arrayQuery( $query );
+
+        if( count($response) <= 0 )
+            return false;
+
+        if( count($response) == 1 )
+            return $response[0]['content_translation'];        
+
+        if( count($response) > 1 )
+        {
+            foreach( $response as $row )
+            {
+                if( $row['content_translation'] == $priorized_locale )
+                    return $priorized_locale;
+            }
+
+            $last_index = count($response) - 1;
+            return $response[$last_index]['content_translation'];
+        }
+
+
+    }
+
+    public static function copyObjectAttributes($object)
+    {
+        // get datamap
+        $datamap = $object->dataMap();
+        //evd($object->contentObjectAttributes());
+        $current_attributes = array();
+
+        foreach( $datamap as $attr )
+        {
+            $insertAttribute = true;
+            $dataString = $attr->toString();
+
+            switch ( $datatypeString = $attr->attribute( 'data_type_string' ) )
+            {
+                case 'ezimage':
+                case 'ezbinaryfile':
+                case 'ezmedia':
+                {
+                    if( empty($dataString) or $dataString == "|" )
+                        $insertAttribute = false;
+                    elseif( $datatypeString != 'ezimage' )
+                    {
+                        $dataString = $attr->content();
+                    }
+
+                    break;
+                }
+                default:
+            }
+
+            if( $insertAttribute )
+                $current_attributes[$attr->ContentClassAttributeIdentifier] = $dataString;
+        }
+
+        return $current_attributes;
+    }
+
     /**
         [ MASSI 22/03/2013 ]
         This method is a copy of eZContentFunction::updateAndPublishObject
@@ -333,6 +507,7 @@ class owTranslationTools
     **/
     public static function publishNewTraductionFromLanguage( eZContentObject $object, array $params, $from_lang )
     {
+
         if ( !array_key_exists( 'attributes', $params ) and !is_array( $params['attributes'] ) and count( $params['attributes'] ) > 0 )
         {
             eZDebug::writeError( 'No attributes specified for object' . $object->attribute( 'id' ), __METHOD__ );
@@ -380,7 +555,6 @@ class owTranslationTools
         **/
 
         //$newVersion = $object->createNewVersion( false, true, $languageCode );
-
         $newVersion = $object->createNewVersionIn( $languageCode, $from_lang, false, true, eZContentObjectVersion::STATUS_INTERNAL_DRAFT );
 
 
@@ -393,7 +567,6 @@ class owTranslationTools
             return false;
         }
 
-
         $newVersion->setAttribute( 'modified', time() );
         $newVersion->store();
 
@@ -403,12 +576,18 @@ class owTranslationTools
 
         foreach( $attributeList as $attribute )
         {
+            $fromString = true;
             $attributeIdentifier = $attribute->attribute( 'contentclass_attribute_identifier' );
+
             if ( array_key_exists( $attributeIdentifier, $attributesData ) )
             {
                 $dataString = $attributesData[$attributeIdentifier];
                 switch ( $datatypeString = $attribute->attribute( 'data_type_string' ) )
                 {
+                    /**
+                        [ MASSI 22/03/2013 ]
+                    **/
+                    /*
                     case 'ezimage':
                     case 'ezbinaryfile':
                     case 'ezmedia':
@@ -416,10 +595,36 @@ class owTranslationTools
                         $dataString = $storageDir . $dataString;
                         break;
                     }
+                    */
+                    case 'ezimage':
+                    {
+                        $dataString = $storageDir . $dataString;
+                        break;
+                    }
+                    case 'ezbinaryfile':
+                    case 'ezmedia':
+                    {
+                        if ( is_object( $dataString ) )
+                        {
+                            $dataString->setAttribute( "contentobject_attribute_id", $attribute->attribute('id') );
+                            $dataString->setAttribute( "version", $newVersion->attribute('version') );
+                            $dataString->store();
+                            $attribute->setContent($dataString);
+
+                            $fromString = false;
+                        }
+                        else
+                            $dataString = $storageDir . $dataString;
+
+                        break;
+                    }
                     default:
                 }
 
-                $attribute->fromString( $dataString );
+                //$attribute->fromString( $dataString );
+                if( $fromString )
+                    $attribute->fromString( $dataString );
+
                 $attribute->store();
             }
         }
@@ -427,35 +632,8 @@ class owTranslationTools
         $db->commit();
 
 
-        /**
-            [ MASSI 22/03/2013 ]
-        **/
-
-        /* $operationResult = eZOperationHandler::execute( 'content', 'publish', array( 'object_id' => $newVersion->attribute( 'contentobject_id' ),
-                                                                                     'version'   => $newVersion->attribute( 'version' ) ) );
-*/
-/*
-vd($newVersion->mainParentNodeID());
-vd($newVersion->parentNodes());
-vd(eZContentObjectTreeNode::fetch($newVersion->mainParentNodeID()));
-vd( eZNodeAssignment::fetchForObject($object->attribute("id")) );
-exit();
-*/
-/*
-            eZDebug::accumulatorStart( 'publish', '', 'publish' );
-            $oldObjectName = $object->name();
-
-            $behaviour = new ezpContentPublishingBehaviour();
-            $behaviour->isTemporary = true;
-            $behaviour->disableAsynchronousPublishing = false;
-            ezpContentPublishingBehaviour::setBehaviour( $behaviour );
-*/
-            $operationResult = eZOperationHandler::execute( 'content', 'publish', array( 'object_id' => $object->attribute( 'id' ),
+        $operationResult = eZOperationHandler::execute( 'content', 'publish', array( 'object_id' => $object->attribute( 'id' ),
                                                                                          'version' => $newVersion->attribute( 'version' ) ) );
-            eZDebug::accumulatorStop( 'publish' );
-
-
-
 
         if( $operationResult['status'] == eZModuleOperationInfo::STATUS_CONTINUE )
             return true;

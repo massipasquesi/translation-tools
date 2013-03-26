@@ -55,13 +55,6 @@ $cli->showmem(); // <- memory usage check
 // script begin
 $cli->beginout();
 
-// session variables
-$http = eZHTTPTool::instance();
-$http->setSessionVariable("count_updated_objects", 0);
-$http->setSessionVariable("count_failed_objects", 0);
-$http->setSessionVariable("count_unprocessed_objects", 0);
-
-// parameters
 $verbose = false;
 $do_update_initial_language = owTranslationTools::checkDoUpdateInitialLanguage();
 $pagination = owTranslationTools::getScriptPagination();
@@ -135,14 +128,7 @@ else
 }
 
 // compte rendu du script
-$cli->colorout("cyan", "Succesfully updated objects : " . $http->sessionVariable("count_updated_objects") );
-$cli->colorout("cyan", "Failures in updating objects : " . $http->sessionVariable("count_failed_objects") );
-$cli->colorout("cyan", "Already translated objects : " . $http->sessionVariable("count_unprocessed_objects") );
 $cli->colorout("cyan", "Total objects processed : " . count($fromLang_objectID_list) );
-
-$http->removeSessionVariable("count_updated_objects");
-$http->removeSessionVariable("count_failed_objects");
-$http->removeSessionVariable("count_unprocessed_objects");
 
 
 // memory peak usage
