@@ -4,9 +4,15 @@ For the moment :
 copy_translation.php script copy objects of one language in another language.
 
 run help_cptrans.php for viewing possibles helps.
+look at owtranslationtools.ini.append.php to see possibles INI parameters.
+
+TO DO :
+- add possibility to specifie a 'section_name' (now only section_id is possible)
+- copy_translation_subtree.php is in developpement (not available for the moment)
 
 Bug to fix :
-For some objects impossible to publish,
-for the moment i skip theses, otherwise i got a fatal error :
+For some objects impossible to publish (objects without a parent_node_id)
+for the moment I skip theses, otherwise i got a fatal error :
 fetching node by node_id return null.
+There are normally objects losts in DB.
 
