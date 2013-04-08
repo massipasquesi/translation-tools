@@ -27,7 +27,10 @@ pagination=100
 # <nom_de_la_methode>[]=<in/=/</etc..>
 # <nom_de_la_methode>[]=<valeur>
 #objectIDListByLangID[]=section_id
+#objectIDListByLangID[]==
+#objectIDListByLangID[]=1
+#objectIDListByLangID[]=contentclass_id
 #objectIDListByLangID[]=in
-#objectIDListByLangID[]=(1,2)
+#objectIDListByLangID[]=(select contentclass_id from ezcontentclass_classgroup where group_name='Content')
 
 */ ?>

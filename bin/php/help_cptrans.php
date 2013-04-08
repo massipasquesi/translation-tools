@@ -18,6 +18,7 @@ $cli->init( array(  'scriptname' => "help_cptrans.php",
                     'dictionary' => array(  "list-locales", 
                                             "list-colors", 
                                             "count-objects",
+                                            "count-objects-classgroup",
                                             "list-globals",
                                             "list-version-status",
                                             "get-fullinidata",
@@ -33,10 +34,19 @@ $script = eZScript::instance( array( 'description' => ('HELP for cptrans'),
                                      'debug-message' =>true) );
 
 $script->startup();
-$script->initialize();
 
 // get options 
-$options = $script->getOptions();
+//$options = $script->getOptions();
+$options = $script->getOptions( "[class-group:][section:]", "", array(
+                                'class-group' => 'Class Group',
+                                'section' => 'Section',
+                            ) );
+
+$sys = eZSys::instance( );
+
+$script->initialize();
+
+// get arguments
 $arguments = $options['arguments'];
 
 // verify arguments
@@ -75,6 +85,28 @@ switch($action)
                $cli->gnotice( "$lang_code : " .  $langObj->objectCount() . " objects");
             else
                 $cli->error( "$lang_code : eZContentLanguage::fetchByLocale return false" );
+        }
+        break;
+
+    case "count-objects-classgroup" :
+        if( !isset( $options['class-group'] ) )
+        {
+            $cli->error( "--class-group parameter is required." );
+            break;
+        }
+
+        $client_filters = owTranslationTools::getClientOptionsFilters($options);
+
+        $language_list = eZContentLanguage::fetchList();
+        foreach( $language_list as $langObj )
+        {
+            $lang_id = $langObj->attribute("id");
+            $lang_code = $langObj->attribute("locale");
+
+            $objects_id = owTranslationTools::objectIDListByLangID($lang_id, $client_filters);
+            $obj_count = count($objects_id);
+
+            $cli->gnotice( "$lang_code : " .  $obj_count . " objects");
         }
         break;
 

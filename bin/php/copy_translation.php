@@ -41,8 +41,18 @@ $script = eZScript::instance( array( 'description' => ('Content Transfert betwee
                                      'debug-message' =>true) );
 
 $script->startup();
+
+//$options = $script->getOptions();
+$options = $script->getOptions( "[class-group:][section:]", "", array(
+                                'class-group' => 'Class Group',
+                                'section' => 'Section',
+                            ) );
+
+$sys = eZSys::instance( );
 $script->initialize();
-$options = $script->getOptions();
+
+//evd($options);
+
 $arguments = $options['arguments'];
 
 if ( count($options['arguments']) < 2 )
@@ -62,7 +72,6 @@ $pagination = owTranslationTools::getScriptPagination();
 $siteaccess = $options['siteaccess'];
 $tolang = $options['arguments'][0];
 $fromlang = $options['arguments'][1];
-unset($options);
 
 $cli->showmem(); // <- memory usage check
 
@@ -74,9 +83,6 @@ if( !$toLangObj || !$fromLangObj )
 
 $cli->showmem(); // <- memory usage check
 
-$tolang_objcount = $toLangObj->objectCount();
-$fromlang_objcount = $fromLangObj->objectCount();
-$cli->gnotice( "$tolang objects count : $tolang_objcount; $fromlang objects count : $fromlang_objcount" );
 
 $cli->showmem(); // <- memory usage check
 
@@ -85,15 +91,22 @@ $fromlang_id = $fromLangObj->ID;
 if($verbose)
     $cli->gnotice( "$tolang id : $tolang_id; $fromlang id : $fromlang_id" );
 
-$cli->showmem(); // <- memory usage check
-
 
 // retrieve object with translation of lang_ID
-$fromLang_objectID_list = owTranslationTools::objectIDListByLangID($fromlang_id);
+$client_filters = owTranslationTools::getClientOptionsFilters($options);
+$fromLang_objectID_list = owTranslationTools::objectIDListByLangID($fromlang_id, $client_filters);
+
+$fromlang_objcount = count($fromLang_objectID_list);
 if( count($fromLang_objectID_list) <= 0 )
     exit_script($cli, $script, "there is no object with language $fromlang\nobjects list : ", $fromLang_objectID_list);
-elseif($verbose)
+
+$tolang_objcount = count( owTranslationTools::objectIDListByLangID($tolang_id, $client_filters) );
+
+$cli->gnotice( "$tolang objects count : $tolang_objcount; $fromlang objects count : $fromlang_objcount" );
+if($verbose)
     $cli->gnotice( show($fromLang_objectID_list) );
+
+$cli->showmem(); // <- memory usage check
 
 if( $pagination === 0 )
 {

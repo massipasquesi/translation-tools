@@ -195,6 +195,116 @@ class owTranslationTools
 
     }
 
+    public static function getClientOptionsFilters($options)
+    {
+		// init du fichier de log
+		self::initLogger();
+
+        if( !isset($options['class-group']) && !isset($options['section']) )
+            return false;
+
+        if( isset($options['class-group']) )
+        {
+            $filtervalue = explode(",", $options['class-group']);
+            if( count($filtervalue) > 1 )
+            {
+                $testtype = ( is_numeric($filtervalue[0]) ) ?  "group_id" : "group_name";
+                foreach( $filtervalue as $value )
+                {
+                    $filtername = ( is_numeric($value) ) ?  "group_id" : "group_name";
+                    if( $filtername != $testtype )
+                    {
+                        $error = "La liste donné pour l'option --class-group doit être soit une liste de ID (numeric) soit une liste de nom (string)";
+                        self::$logger->writeTimedString("getClientOptionsFilters() : " . $error);
+                        self::$logger->writeTimedString("getClientOptionsFilters() : " . show($filtervalue) );
+                        return false;
+                    }
+
+                    $testtype = $filtername; 
+
+                }
+            }
+            else
+            {
+                $filtername = ( is_numeric( $options['class-group'] ) ) ? "group_id" : "group_name"; 
+                $filtervalue = $options['class-group'];
+            }
+
+            $client_filters[$filtername] = $filtervalue;
+        }
+
+        if( isset($options['section']) )
+        {
+            $filtervalue = ( count( explode(",", $options['section']) ) > 1 ) ? explode(",", $options['class-group']) : $options['section'];
+            $client_filters['section_id'] = $filtervalue;
+        }
+
+        return $client_filters;
+    }
+
+    public static function createSQLFilterFromArray($client_filters)
+    {
+        $filters = array();
+
+        foreach( $client_filters as $filtername => $filtervalue )
+        {
+            switch($filtername)
+            {
+                case "group_id" :
+                case "group_name" :
+                    $filters[] = "contentclass_id";
+                    $filters[] = "in";
+                    $sql_in_statement = "( select contentclass_id from ezcontentclass_classgroup where $filtername ";
+
+                    if( is_array($filtervalue) )
+                    {
+                        $sql_in_statement.= "in (";
+                        foreach( $filtervalue as $item )
+                        {
+                            $sql_in_statement.= ( $filtername == "group_id" ) ? $item : "'$item'";
+                            $sql_in_statement.= ",";
+                        }
+                        $sql_in_statement = substr_replace( $sql_in_statement, ")", -1 );
+                    }
+                    else
+                    {
+                        $sql_in_statement.= "= ";
+                        $sql_in_statement.= ( $filtername == "group_id" ) ? $filtervalue : "'$filtervalue'";
+                    }
+
+                    $sql_in_statement.= " )";
+                    $filters[] = $sql_in_statement;
+
+                    break;
+
+                case "section_id" :
+                    $filters[] = "section_id";
+
+                    if( is_array($filtervalue) )
+                    {
+                        $filters[] = "in";
+                        $sql_in_statement = "(";
+                        foreach( $filtervalue as $item )
+                        {
+                            $sql_in_statement.= $item . ",";
+                        }
+                        $sql_in_statement = substr_replace( $sql_in_statement, ")", -1 );
+                        $filters[] = $sql_in_statement;
+                    }
+                    else
+                    {
+                        $filters[] = "=";
+                        $filters[] = $filtervalue;
+                    }
+
+                    break;
+            }
+        }
+
+        return array_chunk( $filters, 3 );
+
+    }
+
 
     public static function fetchLastVersionListByVersion( $version, $limit = 50, $asObject = true )
     {
@@ -226,9 +336,12 @@ class owTranslationTools
     }
 
     // retrieve object with translation of lang_ID
-	public static function objectIDListByLangID($lang_id)
+	public static function objectIDListByLangID($lang_id, $client_filters = false)
 	{
-        $filters = self::getFiltersForFunction("objectIDListByLangID");
+        if( $client_filters === false )
+            $filters = self::getFiltersForFunction("objectIDListByLangID");
+        else
+            $filters = self::createSQLFilterFromArray($client_filters);
 
         $db = eZDB::instance();
 
@@ -242,6 +355,7 @@ class owTranslationTools
                     $whereSQL.= " AND " . implode(" ", $filter);
             }
         }
+
         $result = $db->arrayQuery( "SELECT id FROM ezcontentobject WHERE $whereSQL ORDER BY id" );
 
         if ( count($result) <= 0 )
