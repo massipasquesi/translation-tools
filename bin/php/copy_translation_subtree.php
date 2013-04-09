@@ -42,8 +42,11 @@ $script = eZScript::instance( array( 'description' => ('Content Transfert betwee
                                      'debug-message' =>true) );
 
 $script->startup();
-$script->initialize();
+
 $options = $script->getOptions();
+
+$script->initialize();
+
 $arguments = $options['arguments'];
 
 if ( count($options['arguments']) < 3 )
@@ -51,13 +54,17 @@ if ( count($options['arguments']) < 3 )
     this_script_usage($cli, $script);
 }
 
+$verbose = ( is_null($options['verbose']) ) ? false : $options['verbose'] ;
+$quiet = ( is_null($options['quiet']) ) ? false : $options['quiet'] ;
+$cli->setIsQuiet($quiet);
+$cli->setVerbose($verbose, true);
+
 $cli->showmem(); // <- memory usage check
 
 // script begin
 $cli->beginout();
 
 // parameters
-$verbose = false;
 $do_update_initial_language = owTranslationTools::checkDoUpdateInitialLanguage();
 $pagination = owTranslationTools::getScriptPagination();
 
@@ -65,7 +72,6 @@ $siteaccess = $options['siteaccess'];
 $tolang = $options['arguments'][0];
 $fromlang = $options['arguments'][1];
 $parent_node_id = $options['arguments'][2];
-unset($options);
 
 $cli->showmem(); // <- memory usage check
 
@@ -77,11 +83,6 @@ if( !$toLangObj || !$fromLangObj )
 
 $cli->showmem(); // <- memory usage check
 
-$tolang_objcount = $toLangObj->objectCount();
-$fromlang_objcount = $fromLangObj->objectCount();
-$cli->gnotice( "$tolang objects count : $tolang_objcount; $fromlang objects count : $fromlang_objcount" );
-
-$cli->showmem(); // <- memory usage check
 
 $tolang_id = $toLangObj->ID; 
 $fromlang_id = $fromLangObj->ID; 
@@ -94,6 +95,22 @@ $cli->showmem(); // <- memory usage check
 // retrieve subtree of parent_node_id with translation of lang_ID
 //$fromLang_objectID_list = owTranslationTools::objectIDListByLangID($fromlang_id);
 $fromLang_objectID_list = owTranslationTools::subtreeObjectsIDListByLocale($fromlang, $parent_node_id);
+
+$cli->showmem(); // <- memory usage check
+
+//$tolang_objcount = owTranslationTools::langObjectsCountFromIdList($tolang_id, $fromLang_objectID_list);
+//$fromlang_objcount = owTranslationTools::langObjectsCountFromIdList($fromlang_id, $fromLang_objectID_list);
+$tolang_objcount = count( owTranslationTools::subtreeObjectsIDListByLocale($tolang, $parent_node_id) );
+$fromlang_objcount = count( $fromLang_objectID_list );
+
+$cli->gnotice( "$tolang objects count : $tolang_objcount; $fromlang objects count : $fromlang_objcount" );
+
+$cli->showmem(); // <- memory usage check
+
+//exit();
+if( !is_array($fromLang_objectID_list) )
+    exit_script($cli, $script, "owTranslationTools::subtreeObjectsIDListByLocale() return ", show($fromLang_objectID_list));
+
 if( count($fromLang_objectID_list) <= 0 )
     exit_script($cli, $script, "there is no object with language $fromlang\nobjects list : ", $fromLang_objectID_list);
 elseif($verbose)
@@ -102,6 +119,8 @@ elseif($verbose)
 if( $pagination === 0 )
 {
     $commandtoexec = "php " . $cli->scriptpath . "cptrans_part.php $tolang#$fromlang all";
+    $commandtoexec.= ($quiet) ? " --quiet" : "" ;
+    $commandtoexec.= ($verbose) ? " --verbose" : "" ;
     $cli->colorout("cyan", $commandtoexec);
     
     exec($commandtoexec);

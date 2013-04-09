@@ -373,75 +373,57 @@ class owTranslationTools
     // retrieve subtree list of objects with translation of lang_ID
 	public static function subtreeObjectsIDListByLocale($language, $nodeID)
 	{
+		// init du fichier de log
+		self::initLogger();
+
         $params = array('language' => $language);
-        evd( eZContentObjectTreeNode::fetch($nodeID, "eng-GB") );
-        evd( eZContentObjectTreeNode::fetchByContentObjectID($nodeID) );
-        eZContentObjectTreeNode::subtreeByNodeID( $params, $nodeID );
-
-        if ( !is_numeric( $nodeID ) and !is_array( $nodeID ) )
+        $parent_node = eZContentObjectTreeNode::fetch($nodeID, $language);
+        if( !( $parent_node instanceof eZContentObjectTreeNode ) )
         {
-            return null;
+            self::$logger->writeTimedString("[ERROR] : subtreeObjectsIDListByLocale() : No Node found for node_id : " . $nodeID );
+            return false;
         }
+
+        $subtree = eZContentObjectTreeNode::subtreeByNodeID( $params, $nodeID );
         
-        if ( $language )
+        $objectIDList[] = $parent_node->attribute('contentobject_id'); 
+        
+        foreach( $subtree as $current_node )
         {
-            if ( !is_array( $language ) )
-            {
-             $language = array( $language );
-            }
-             // This call must occur after eZContentObjectTreeNode::createPathConditionAndNotEqParentSQLStrings,
-             // because the parent node may not exist in Language
-             eZContentLanguage::setPrioritizedLanguages( $language );
-         }
-        
-         $languageFilter = ' AND ' . eZContentLanguage::languagesSQLFilter( 'ezcontentobject' );
-         
-         if ( $language )
-         {
-             eZContentLanguage::clearPrioritizedLanguages();
-         }
-         
-        evd($languageFilter);
+            if( $current_node instanceof eZContentObjectTreeNode )
+                $objectIDList[] = $current_node->attribute('contentobject_id');
+            else
+                self::$logger->writeTimedString("[ERROR] : subtreeObjectsIDListByLocale() : Element in subtree is not an eZContentObjectTreeNode : " . show($current_node) );
 
-         // Determine whether we should show invisible nodes.
-         $showInvisibleNodesCond = eZContentObjectTreeNode::createShowInvisibleSQLString( true );
-         
-         $query = "SELECT DISTINCT
-                       id,
-                    FROM
-                       ezcontentobject,
-                    WHERE
-                       $languageFilter
-                   ";
-         
-         $query .= " ORDER BY id";
-         
-         $db = eZDB::instance();
-         
-         $server = count( $sqlPermissionChecking['temp_tables'] ) > 0 ? eZDBInterface::SERVER_SLAVE : false;
-         
-         $nodeListArray = $db->arrayQuery( $query, array( 'offset' => $offset,
-                                                          'limit'  => $limit ),
-                                                   $server );
-         
-         if ( $asObject )
-         {
-             $retNodeList = eZContentObjectTreeNode::makeObjectsArray( $nodeListArray );
-             if ( $loadDataMap === true )
-                 eZContentObject::fillNodeListAttributes( $retNodeList );
-             else if ( $loadDataMap && is_numeric( $loadDataMap ) && $loadDataMap >= count( $retNodeList ) )
-                 eZContentObject::fillNodeListAttributes( $retNodeList );
-         }
-         else
-         {
-             $retNodeList = $nodeListArray;
-         }
-         
-         // cleanup temp tables
-         $db->dropTempTableList( $sqlPermissionChecking['temp_tables'] );
-         
-         return $retNodeList;
+        }
 
+        return $objectIDList;
+    }
+
+    public static function langObjectsCountFromIdList($languageID, $objectID_list)
+    {
+        $db = eZDB::instance();
+    
+        if ( $db->databaseName() == 'oracle' )
+        {
+                $whereSQL = "bitand( language_mask, $languageID ) > 0";
+        }
+        else
+        {
+                $whereSQL = "language_mask & $languageID > 0";
+        }
+    
+        $result = $db->arrayQuery( "SELECT id FROM ezcontentobject WHERE $whereSQL ORDER BY id" );
+
+        if ( count($result) <= 0 )
+            return array();
+
+        foreach( $result as $element )
+        {
+            $lang_objectID_list[] = $element['id'];
+        }
+
+        return count( array_intersect($objectID_list, $lang_objectID_list) );
     }
 
 

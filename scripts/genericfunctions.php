@@ -15,9 +15,11 @@ function script_usage($cli, $script, $options = false)
 // fonction d'arret de script générique
 function exit_script($cli, $script, $errormsg ="", $debug_var = "no_thanks")
 {
-    $cli->error($errormsg);
+    $cli->outputAndLog("error", $errormsg);
+
     if( $debug_var != "no_thanks" )
-        $cli->error( show($debug_var) );
+        $cli->outputAndLog("error", show($debug_var) );
+
     $cli->endout(false, "red-bg");
     $script->shutdown();
     exit();
@@ -31,6 +33,8 @@ function show($var)
 		$bool = ( $var )? "true" : "false";
 		$show = gettype($var) . " : " . $bool;
 	}
+    elseif( is_null($var) )
+        $show = gettype($var);
 	else
 		$show = print_r($var,true);
 	

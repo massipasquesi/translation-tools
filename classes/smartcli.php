@@ -12,6 +12,8 @@ class SmartCLI extends eZCLI
     protected $logname;
     protected $logger;
     protected $logmemory = false;
+    protected $verbose = false;
+    protected $log_verbose = false;
         
 	/**
      * Returns a shared instance of the SmartCLI class.
@@ -76,12 +78,30 @@ class SmartCLI extends eZCLI
         $this->dictionary = $dictionary;
     }
 
+    public function setVerbose($verbose, $copy_for_log = false)
+    {
+        $this->verbose = (bool)$verbose;
+        if( $copy_for_log )
+            $this->log_verbose = (bool)$verbose;
+    }
+
+    public function setLogVerbose($verbose)
+    {
+        $this->log_verbose = (bool)$verbose;
+    }
+
     /*
      * output message and log it
     */
     public function outputAndLog($label, $msg)
     {
-        $this->logger->writeTimedString($msg, $label);
+        $log = true;
+		
+        if ( !$this->log_verbose && $label == "notice" )
+            $log = false;
+
+        if($log)
+            $this->logger->writeTimedString($msg, $label);
 
         $this->colorout(self::$label_color[$label], $msg);
     }

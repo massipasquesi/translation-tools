@@ -17,10 +17,10 @@ if(!gc_enabled())
 function this_script_usage($cli, $script)
 {
     $msg = "\nusage: php <path_to_script>/cptrans_part.php <to_lang#from_lang> <1:2:3:4:5:...>\n";
-    $msg = "\nwhere second parameters is a list of content_objects_IDs or 'all' for no pagination\n";
-    $msg = "\nNormally you don't have to run this script manually, it's called by copy_translation.php.";
-    $msg = "\n";
-    $cli->warning($msg);
+    $msg.= "\nwhere second parameters is a list of content_objects_IDs or 'all' for no pagination\n";
+    $msg.= "\nNormally you don't have to run this script manually, it's called by copy_translation.php.";
+    $msg.= "\n";
+    $cli->error($msg);
     $script->shutdown();
     exit();
 }
@@ -28,7 +28,6 @@ function this_script_usage($cli, $script)
 
 // init CLI 
 $cli = SmartCLI::instance();
-$cli->setIsQuiet(false);
 
 $cli->init( array(  'scriptname' => "cptrans_part.php",
                     'scriptpath' => "extension/translation-tools/bin/php/",
@@ -45,16 +44,22 @@ $script = eZScript::instance( array( 'description' => ('Copy Action between two 
                                      'debug-message' =>true) );
 
 $script->startup();
-$script->initialize();
+
 $options = $script->getOptions();
+
+$script->initialize();
 
 if ( count($options['arguments']) < 2 )
 {
     this_script_usage($cli, $script);
 }
 
-$cli->showmem(); // <- memory usage check
+$verbose = ( is_null($options['verbose']) ) ? false : $options['verbose'] ;
+$quiet = ( is_null($options['quiet']) ) ? false : $options['quiet'] ;
+$cli->setIsQuiet($quiet);
+$cli->setVerbose($verbose, true);
 
+$cli->showmem(); // <- memory usage check
 
 // Login as admin user
 $ini           = eZINI::instance();
@@ -134,18 +139,28 @@ foreach( $objects_id_list as $object_id )
 
     if( !$canPublishObject )
     {
-        $parent_object_id = owTranslationTools::getObjectIDFromNodeID($current_object->mainParentNodeID());
-        //$parent_object = eZContentObject::fetch($parent_object_id);
-        $parent_fromlang = owTranslationTools::getLocaleByObjectID($parent_object_id, $langs['fromlang']);
-
         $msg = "Parent of object with ID : $object_id need to be translated also !\n";
         $msg.= "mainParentNodeID : " . $current_object->mainParentNodeID();
+
+        if( !is_numeric( $current_object->mainParentNodeID() ) )
+        {
+            $cli->outputAndLog("warning", $msg);
+            $errormsg = "Object without Node !!! eZContentObject::mainPArentNodeID return : " . show($current_object->mainParentNodeID());
+            $cli->outputAndLog("error", $errormsg);
+            break;
+        }
+
+        $parent_object_id = owTranslationTools::getObjectIDFromNodeID($current_object->mainParentNodeID());
+        $parent_fromlang = owTranslationTools::getLocaleByObjectID($parent_object_id, $langs['fromlang']);
+
         $msg.= "\nParent ObjectID : " . $parent_object_id;
         $msg.= "\nParent fromlang : " . $parent_fromlang;
         $cli->outputAndLog("warning", $msg);
 
         $tolang = $langs['tolang'];
         $commandtoexec = "php " . $cli->scriptpath . "cptrans_part.php $tolang#$parent_fromlang $parent_object_id";
+        $commandtoexec.= ($verbose) ? " --verbose" : "" ;
+        $commandtoexec.= ($quiet) ? " --quiet" : "" ;
         $cli->outputAndLog("notice", "execute command : " . $commandtoexec);
         exec($commandtoexec);
 

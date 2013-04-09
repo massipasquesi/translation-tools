@@ -25,7 +25,6 @@ function this_script_usage($cli, $script)
 
 // init CLI 
 $cli = SmartCLI::instance();
-$cli->setIsQuiet(false);
 
 $cli->init( array(  'scriptname' => "copy_translation.php",
                     'scriptpath' => "extension/translation-tools/bin/php/",
@@ -51,8 +50,6 @@ $options = $script->getOptions( "[class-group:][section:]", "", array(
 $sys = eZSys::instance( );
 $script->initialize();
 
-//evd($options);
-
 $arguments = $options['arguments'];
 
 if ( count($options['arguments']) < 2 )
@@ -65,7 +62,11 @@ $cli->showmem(); // <- memory usage check
 // script begin
 $cli->beginout();
 
-$verbose = false;
+$verbose = ( is_null($options['verbose']) ) ? false : $options['verbose'] ;
+$quiet = ( is_null($options['quiet']) ) ? false : $options['quiet'] ;
+$cli->setIsQuiet($quiet);
+$cli->setVerbose($verbose, true);
+
 $do_update_initial_language = owTranslationTools::checkDoUpdateInitialLanguage();
 $pagination = owTranslationTools::getScriptPagination();
 
@@ -80,9 +81,6 @@ $fromLangObj = eZContentLanguage::fetchByLocale( $fromlang );
 
 if( !$toLangObj || !$fromLangObj )
     exit_script( $cli, $script, "\"$tolang\" or \"$fromlang\" are not in the list of the languages used on the site ", eZContentLanguage::fetchLocaleList() );
-
-$cli->showmem(); // <- memory usage check
-
 
 $cli->showmem(); // <- memory usage check
 
@@ -111,6 +109,8 @@ $cli->showmem(); // <- memory usage check
 if( $pagination === 0 )
 {
     $commandtoexec = "php " . $cli->scriptpath . "cptrans_part.php $tolang#$fromlang all";
+    $commandtoexec.= ($verbose) ? " --verbose" : "" ;
+    $commandtoexec.= ($quiet) ? " --quiet" : "" ;
     $cli->colorout("cyan", $commandtoexec);
     
     exec($commandtoexec);
@@ -131,6 +131,8 @@ else
         $string_id_list = implode(":", $id_list_part);
     
         $commandtoexec = "php " . $cli->scriptpath . "cptrans_part.php $tolang#$fromlang $string_id_list";
+        $commandtoexec.= ($verbose) ? " --verbose" : "" ;
+        $commandtoexec.= ($quiet) ? " --quiet" : "" ;
         $cli->colorout("cyan", $commandtoexec);
     
         exec($commandtoexec);
