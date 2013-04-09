@@ -6,13 +6,26 @@ copy_translation.php script copy objects of one language in another language.
 run help_cptrans.php for viewing possibles helps.
 look at owtranslationtools.ini.append.php to see possibles INI parameters.
 
+Execution :
+To copy objects from eng-GB to eng-US :
+php extension/translation-tools/bin/php/copy_translation.php eng-US eng-GB
+for filters look in owtranslationtools.ini.append.php
+or options
+--section=<section_id>
+--class-group=<class_group_name>|<class_group_id>
+values of options can be a list separeted by comma
+
+To copy objects from eng-GB to eng-US only for the subtree of node_id=101
+php extension/translation-tools/bin/php/copy_translation_subtree.php eng-US eng-GB 101
+
+
 TO DO :
 - add possibility to specifie a 'section_name' (now only section_id is possible)
-- copy_translation_subtree.php is in developpement (not available for the moment)
+- add possibility to specifie 'section' and 'class_group' filters to copy_translation_subtree.php
 
-Bug to fix :
+Notes :
 For some objects impossible to publish (objects without a parent_node_id)
 for the moment I skip theses, otherwise i got a fatal error :
 fetching node by node_id return null.
-There are normally objects losts in DB.
+The error keep only for lost objetcs (objects that lost node in DB)
 
